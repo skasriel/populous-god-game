@@ -1,6 +1,6 @@
 import { World } from './World';
 import { Player } from './Player';
-import { Walker, WalkerState } from './Walker';
+import { Walker, WalkerState, BehaviorMode } from './Walker';
 import {
   AI_THINK_INTERVAL, AI_TERRAIN_ACTIONS_PER_THINK,
   TERRAIN_RAISE_COST, GRID_SIZE, POWER_COSTS
@@ -27,18 +27,13 @@ export class AIPlayer {
   }
 
   private think(enemy: Player): void {
-    // Strategy priorities:
-    // 1. Flatten terrain near own settlements for growth
-    // 2. Move papal magnet strategically
-    // 3. Use divine powers when available
-
     this.flattenNearSettlements();
     this.updateMagnet(enemy);
+    this.updateBehavior(enemy);
     this.usePowers(enemy);
   }
 
   private flattenNearSettlements(): void {
-    // Find settlements and try to flatten surrounding terrain
     for (const settlement of this.player.settlements) {
       let actionsLeft = AI_TERRAIN_ACTIONS_PER_THINK;
 
@@ -61,14 +56,12 @@ export class AIPlayer {
       }
     }
 
-    // If we have no settlements but have walkers, try to flatten where walkers are
     if (this.player.settlements.length === 0 && this.player.walkers.length > 0) {
       const walker = this.player.walkers[0];
       const tx = Math.floor(walker.x);
       const tz = Math.floor(walker.z);
       const h = this.world.getHeight(tx, tz);
 
-      // Flatten a small area at walker height
       for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
           const nx = wrapCoord(tx + dx);
@@ -84,10 +77,7 @@ export class AIPlayer {
   }
 
   private updateMagnet(enemy: Player): void {
-    // Move magnet based on strategy
-
     if (this.player.settlements.length > 0 && enemy.settlements.length > 0) {
-      // If we're stronger, move toward enemy
       const ourPop = this.player.getTotalPopulation();
       const enemyPop = enemy.getTotalPopulation();
 
@@ -103,7 +93,6 @@ export class AIPlayer {
         this.player.magnetZ = s.z + randomInt(-5, 5);
       }
     } else if (this.player.settlements.length === 0) {
-      // No settlements — send walkers to explore
       const pos = this.world.findRandomLandTile();
       if (pos) {
         this.player.magnetX = pos.x;
@@ -112,10 +101,41 @@ export class AIPlayer {
     }
   }
 
+  /** AI chooses behavior mode based on game state */
+  private updateBehavior(enemy: Player): void {
+    const ourPop = this.player.getTotalPopulation();
+    const enemyPop = enemy.getTotalPopulation();
+
+    if (ourPop > enemyPop * 2) {
+      // Overwhelming advantage — attack
+      this.player.behaviorMode = BehaviorMode.FIGHT_THEN_SETTLE;
+    } else if (this.player.walkers.length > 5 && this.player.settlements.length < 3) {
+      // Many walkers, few settlements — gather and settle
+      this.player.behaviorMode = BehaviorMode.GATHER_THEN_SETTLE;
+    } else if (ourPop < enemyPop * 0.5) {
+      // Losing badly — settle to build up
+      this.player.behaviorMode = BehaviorMode.SETTLE;
+    } else {
+      // Default — settle
+      this.player.behaviorMode = BehaviorMode.SETTLE;
+    }
+  }
+
   private usePowers(enemy: Player): void {
-    // Use earthquake on enemy settlements if we have enough mana
+    // Use knight if we have a strong leader
+    const leader = this.player.getLeader();
+    if (leader && leader.population > 10 && this.player.mana >= POWER_COSTS.KNIGHT) {
+      if (Math.random() < 0.1) {
+        leader.isKnight = true;
+        leader.isLeader = false;
+        leader.population = Math.floor(leader.population * 1.5);
+        this.player.leaderId = null;
+        this.player.mana -= POWER_COSTS.KNIGHT;
+      }
+    }
+
+    // Use earthquake on enemy settlements
     if (this.player.mana >= POWER_COSTS.EARTHQUAKE && enemy.settlements.length > 0) {
-      // 20% chance per think cycle to use earthquake
       if (Math.random() < 0.2) {
         const target = enemy.settlements[Math.floor(Math.random() * enemy.settlements.length)];
         this.useEarthquake(target.x, target.z);

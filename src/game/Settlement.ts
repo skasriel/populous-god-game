@@ -1,5 +1,5 @@
 import { World } from './World';
-import { Walker } from './Walker';
+import { Walker, BehaviorMode } from './Walker';
 import {
   SETTLEMENT_SPAWN_INTERVAL, SETTLEMENT_SPAWN_MIN_POP,
   SETTLEMENT_GROWTH_RATE, MAX_SETTLEMENT_POPULATION,
@@ -15,7 +15,8 @@ export class Settlement {
   z: number;
   population: number;
   private spawnTimer: number;
-  private cachedFlatArea: number = 1;
+  private releaseTimer: number = 0; // Timer for releasing walkers in non-SETTLE modes
+  cachedFlatArea: number = 1;
   private flatAreaCacheTime: number = 0;
 
   constructor(playerIndex: number, x: number, z: number, initialPopulation: number) {
@@ -27,35 +28,55 @@ export class Settlement {
     this.spawnTimer = SETTLEMENT_SPAWN_INTERVAL;
   }
 
-  update(world: World, dt: number): Walker | null {
-    // Grow population
+  update(world: World, dt: number, behaviorMode: BehaviorMode = BehaviorMode.SETTLE): Walker | null {
     const tier = this.getTier();
     const maxPop = BUILDING_TIERS[tier].maxPop;
-    if (this.population < maxPop) {
-      this.population = Math.min(maxPop, this.population + SETTLEMENT_GROWTH_RATE * dt);
-    }
 
-    // Spawn walkers periodically
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0 && this.population >= SETTLEMENT_SPAWN_MIN_POP) {
-      this.spawnTimer = SETTLEMENT_SPAWN_INTERVAL / (tier + 1); // Higher tier = faster spawning
-      const spawnPop = Math.min(WALKER_SPAWN_POPULATION, Math.floor(this.population / 2));
-      this.population -= spawnPop;
+    // In SETTLE mode, population grows over time
+    if (behaviorMode === BehaviorMode.SETTLE || behaviorMode === BehaviorMode.FIGHT_THEN_SETTLE) {
+      if (this.population < maxPop) {
+        const growthMultiplier = 0.5 + (this.cachedFlatArea / 12) * 1.5;
+        this.population = Math.min(maxPop, this.population + SETTLEMENT_GROWTH_RATE * growthMultiplier * dt);
+      }
 
-      // Spawn walker adjacent to settlement
-      const offsets = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-      for (const [dx, dz] of offsets) {
-        const sx = this.x + dx;
-        const sz = this.z + dz;
-        if (world.isPassable(sx, sz)) {
-          return new Walker(this.playerIndex, sx + 0.5, sz + 0.5, spawnPop);
+      // Natural spawning — only when settlement is nearly full
+      this.spawnTimer -= dt;
+      if (this.spawnTimer <= 0 && this.population >= maxPop * 0.8) {
+        this.spawnTimer = SETTLEMENT_SPAWN_INTERVAL / (tier + 1);
+        const spawnPop = Math.min(WALKER_SPAWN_POPULATION, Math.floor(this.population / 3));
+        if (spawnPop >= 1) {
+          this.population -= spawnPop;
+          return this.spawnWalkerAdjacent(world, spawnPop);
         }
       }
-      // All adjacent tiles blocked, try the settlement tile itself
-      return new Walker(this.playerIndex, this.x + 0.5, this.z + 0.5, spawnPop);
+    } else {
+      // In GO_TO_MAGNET or GATHER mode: release one person periodically
+      // Population still grows slowly but people leave toward the magnet
+      if (this.population < maxPop) {
+        this.population = Math.min(maxPop, this.population + SETTLEMENT_GROWTH_RATE * 0.3 * dt);
+      }
+
+      this.releaseTimer -= dt;
+      if (this.releaseTimer <= 0 && this.population >= 2) {
+        this.releaseTimer = 3.0; // Release one person every 3 seconds
+        this.population -= 1;
+        return this.spawnWalkerAdjacent(world, 1);
+      }
     }
 
     return null;
+  }
+
+  private spawnWalkerAdjacent(world: World, pop: number): Walker {
+    const offsets = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+    for (const [dx, dz] of offsets) {
+      const sx = this.x + dx;
+      const sz = this.z + dz;
+      if (world.isPassable(sx, sz)) {
+        return new Walker(this.playerIndex, sx + 0.5, sz + 0.5, pop);
+      }
+    }
+    return new Walker(this.playerIndex, this.x + 0.5, this.z + 0.5, pop);
   }
 
   /** Refresh the flat area cache (called less frequently) */

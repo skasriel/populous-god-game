@@ -183,7 +183,7 @@ export class World {
     const queue = [{ x: wx, z: wz }];
     visited.add(`${wx},${wz}`);
     let count = 0;
-    const maxCount = 12; // don't need to count more than this
+    const maxCount = 16; // enough to detect castles (need 12+ flat tiles)
 
     while (queue.length > 0 && count < maxCount) {
       const tile = queue.shift()!;
@@ -207,6 +207,43 @@ export class World {
   /** Get raw heightmap for rendering */
   getHeightmap(): number[][] {
     return this.heightmap;
+  }
+
+  /**
+   * Find the nearest flat tile (with at least minFlat contiguous flat tiles)
+   * that is at least minDist away from all positions in `avoidPositions`.
+   * Searches in expanding rings around (cx, cz).
+   */
+  findNearestFlatTile(
+    cx: number, cz: number,
+    minFlat: number,
+    avoidPositions: { x: number; z: number }[],
+    minDist: number,
+    maxSearchRadius: number = 15
+  ): { x: number; z: number } | null {
+    for (let r = 1; r <= maxSearchRadius; r++) {
+      // Scan ring at distance r
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue; // only ring edge
+          const tx = wrapCoord(Math.floor(cx) + dx);
+          const tz = wrapCoord(Math.floor(cz) + dz);
+          if (!this.isPassable(tx, tz)) continue;
+          if (this.countFlatArea(tx, tz) < minFlat) continue;
+
+          // Check distance from all positions to avoid
+          let tooClose = false;
+          for (const pos of avoidPositions) {
+            const ddx = Math.abs(tx - pos.x);
+            const ddz = Math.abs(tz - pos.z);
+            const dist = Math.sqrt(ddx * ddx + ddz * ddz);
+            if (dist < minDist) { tooClose = true; break; }
+          }
+          if (!tooClose) return { x: tx, z: tz };
+        }
+      }
+    }
+    return null;
   }
 
   /** Find a random land tile */

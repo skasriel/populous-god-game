@@ -12,28 +12,30 @@ export const MAX_HEIGHT_DIFF = 1; // max height difference between adjacent tile
 
 // ── Walkers ──
 export const WALKER_SPEED = 1.5; // tiles per second
-export const WALKER_SETTLE_CHANCE = 0.02; // chance per tick to attempt settling
+export const WALKER_SETTLE_CHANCE = 0.003; // chance per tick to attempt settling (much slower)
 export const INITIAL_WALKER_POPULATION = 5;
 export const WALKER_SPAWN_POPULATION = 3; // population of newly spawned walkers
+export const MIN_SETTLEMENT_DISTANCE = 4; // minimum tiles between settlements
 
 // ── Settlements ──
-export const SETTLEMENT_SPAWN_INTERVAL = 8; // seconds between spawning walkers
-export const SETTLEMENT_SPAWN_MIN_POP = 4; // minimum population to spawn a walker
-export const SETTLEMENT_GROWTH_RATE = 0.3; // population gained per second
+export const SETTLEMENT_SPAWN_INTERVAL = 12; // seconds between spawning walkers
+export const SETTLEMENT_SPAWN_MIN_POP = 6; // minimum population to spawn a walker
+export const SETTLEMENT_GROWTH_RATE = 0.15; // population gained per second (slow growth)
 export const MAX_SETTLEMENT_POPULATION = 50;
 
-// Building tiers by flat area
+// Building tiers by flat area — per Populous manual, larger settlements
+// need much more contiguous flat land for crops
 export const BUILDING_TIERS = [
-  { name: 'Hut', minFlat: 1, maxPop: 8, color: 0x8B7355 },
-  { name: 'House', minFlat: 2, maxPop: 16, color: 0x9B8365 },
-  { name: 'Manor', minFlat: 4, maxPop: 30, color: 0xAB9375 },
-  { name: 'Castle', minFlat: 7, maxPop: 50, color: 0xBBA385 },
+  { name: 'Hut', minFlat: 2, maxPop: 10, color: 0x8B7355 },
+  { name: 'House', minFlat: 5, maxPop: 20, color: 0x9B8365 },
+  { name: 'Manor', minFlat: 9, maxPop: 35, color: 0xAB9375 },
+  { name: 'Castle', minFlat: 12, maxPop: 50, color: 0xBBA385 },
 ];
 
 // ── Mana ──
-export const MANA_PER_POPULATION = 0.1; // mana gained per population per second
+export const MANA_PER_POPULATION = 0.05; // mana gained per population per second
 export const MAX_MANA = 500;
-export const STARTING_MANA = 50;
+export const STARTING_MANA = 30;
 
 // ── Combat ──
 export const COMBAT_DURATION = 1.0; // seconds a combat takes

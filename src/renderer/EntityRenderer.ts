@@ -197,12 +197,19 @@ export class EntityRenderer {
       let obj = this.settlementMeshes.get(settlement.id);
       const tier = settlement.getTier();
 
-      // Determine which town level sprite to use
-      // Use population ratio within the tier to pick between the two levels
-      const [lowLevel, highLevel] = TIER_TO_LEVELS[tier];
-      const tierMaxPop = BUILDING_TIERS[tier].maxPop;
-      const popRatio = settlement.population / tierMaxPop;
-      const levelIdx = popRatio > 0.5 ? highLevel : lowLevel;
+      // Map population directly to sprite level (0-7) across all 8 town sprites.
+      // As population grows, the building visually upgrades: hut → house → manor → castle
+      const maxPop = BUILDING_TIERS[Math.min(tier, BUILDING_TIERS.length - 1)].maxPop;
+      const pop = settlement.population;
+      let levelIdx: number;
+      if (pop <= 3) levelIdx = 0;       // Tiny hut
+      else if (pop <= 7) levelIdx = 1;   // Small hut
+      else if (pop <= 12) levelIdx = 2;  // House
+      else if (pop <= 18) levelIdx = 3;  // Larger house
+      else if (pop <= 25) levelIdx = 4;  // Manor
+      else if (pop <= 33) levelIdx = 5;  // Large manor
+      else if (pop <= 42) levelIdx = 6;  // Castle
+      else levelIdx = 7;                  // Grand castle
 
       if (!obj) {
         obj = this.createBuildingSprite(levelIdx, tier, settlement.playerIndex);
@@ -210,8 +217,8 @@ export class EntityRenderer {
         this.settlementMeshes.set(settlement.id, obj);
       }
 
-      // Rebuild if tier or level changed
-      if ((obj.userData as any).tier !== tier || (obj.userData as any).levelIdx !== levelIdx) {
+      // Rebuild if level changed
+      if ((obj.userData as any).levelIdx !== levelIdx) {
         this.scene.remove(obj);
         obj = this.createBuildingSprite(levelIdx, tier, settlement.playerIndex);
         this.scene.add(obj);

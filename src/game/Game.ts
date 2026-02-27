@@ -1,6 +1,6 @@
 import { World } from './World';
 import { Player } from './Player';
-import { Walker, WalkerState, resetWalkerIds } from './Walker';
+import { Walker, WalkerState, BehaviorMode, resetWalkerIds } from './Walker';
 import { Settlement, resetSettlementIds } from './Settlement';
 import { Combat } from './Combat';
 import { AIPlayer } from './AIPlayer';
@@ -12,7 +12,7 @@ import { UIOverlay } from '../renderer/UIOverlay';
 import { InputManager, InteractionMode } from '../input/InputManager';
 import {
   TICK_INTERVAL, TERRAIN_RAISE_COST, TERRAIN_LOWER_COST,
-  GRID_SIZE, POWER_COSTS
+  GRID_SIZE, POWER_COSTS, MIN_SETTLEMENT_DISTANCE
 } from '../utils/Constants';
 import { wrapCoord, wrappedDistance } from '../utils/MathUtils';
 
@@ -22,6 +22,7 @@ export interface GameAction {
   z?: number;
   player?: number;
   power?: string;
+  behaviorMode?: BehaviorMode;
   [key: string]: any;
 }
 
@@ -153,13 +154,100 @@ export class Game {
     // Update AI
     this.aiPlayer.update(dt, this.players[0]);
 
-    // Update walkers
+    // Check leader mechanic — first walker to touch papal magnet becomes leader
     for (const player of this.players) {
+      player.checkLeaderMagnet();
+    }
+
+    // Build list of all walkers for spatial queries
+    const allWalkers: Walker[] = [];
+    for (const p of this.players) {
+      allWalkers.push(...p.walkers);
+    }
+
+    // Update walkers with behavior mode awareness
+    for (const player of this.players) {
+      const opponent = this.players[player.playerIndex === 0 ? 1 : 0];
+
+      // Collect all settlement positions (both players) for settle distance checks
+      const allSettlementPositions: { x: number; z: number }[] = [];
+      for (const p of this.players) {
+        for (const s of p.settlements) {
+          allSettlementPositions.push({ x: s.x, z: s.z });
+        }
+      }
+
       for (const walker of player.walkers) {
-        walker.update(this.world, player.magnetX, player.magnetZ, dt);
+        // In SETTLE mode, assign a settle target if walker doesn't have one
+        if ((player.behaviorMode === BehaviorMode.SETTLE ||
+             player.behaviorMode === BehaviorMode.FIGHT_THEN_SETTLE ||
+             player.behaviorMode === BehaviorMode.GATHER_THEN_SETTLE) &&
+            !walker.isKnight && !walker.isLeader &&
+            walker.settleTargetX === null) {
+          const target = this.world.findNearestFlatTile(
+            walker.x, walker.z, 2, allSettlementPositions, MIN_SETTLEMENT_DISTANCE
+          );
+          if (target) {
+            walker.settleTargetX = target.x;
+            walker.settleTargetZ = target.z;
+          }
+        }
+
+        // In GO_TO_MAGNET mode, clear settle target
+        if (player.behaviorMode === BehaviorMode.GO_TO_MAGNET) {
+          walker.settleTargetX = null;
+          walker.settleTargetZ = null;
+        }
+
+        // Find nearby enemies (within 15 tiles) for behavior targeting
+        const nearbyEnemies = opponent.walkers
+          .filter(e => wrappedDistance(walker.x, walker.z, e.x, e.z) < 15)
+          .sort((a, b) =>
+            wrappedDistance(walker.x, walker.z, a.x, a.z) -
+            wrappedDistance(walker.x, walker.z, b.x, b.z)
+          );
+
+        // Find nearby friendlies (within 10 tiles) for gather mode
+        const nearbyFriendlies = player.walkers
+          .filter(f => f.id !== walker.id && wrappedDistance(walker.x, walker.z, f.x, f.z) < 10)
+          .sort((a, b) =>
+            wrappedDistance(walker.x, walker.z, a.x, a.z) -
+            wrappedDistance(walker.x, walker.z, b.x, b.z)
+          );
+
+        // Knights also target enemy settlements
+        if (walker.isKnight && nearbyEnemies.length === 0) {
+          // Point knight toward nearest enemy settlement
+          let nearestSettDist = Infinity;
+          let nearestSettX = walker.x;
+          let nearestSettZ = walker.z;
+          for (const s of opponent.settlements) {
+            const d = wrappedDistance(walker.x, walker.z, s.x + 0.5, s.z + 0.5);
+            if (d < nearestSettDist) {
+              nearestSettDist = d;
+              nearestSettX = s.x + 0.5;
+              nearestSettZ = s.z + 0.5;
+            }
+          }
+          if (nearestSettDist < Infinity) {
+            // Create a fake "enemy" at the settlement location
+            const fakeTarget = new Walker(opponent.playerIndex, nearestSettX, nearestSettZ, 0);
+            nearbyEnemies.push(fakeTarget);
+          }
+        }
+
+        walker.update(
+          this.world,
+          player.magnetX,
+          player.magnetZ,
+          dt,
+          player.behaviorMode,
+          nearbyEnemies,
+          nearbyFriendlies
+        );
 
         // Check if walker should settle
-        if (walker.shouldSettle(this.world)) {
+        if (walker.shouldSettle(this.world, player.behaviorMode)) {
           this.settleWalker(walker, player);
         }
 
@@ -169,8 +257,8 @@ export class Game {
         if (this.world.isWater(tx, tz)) {
           walker.population = 0;
         }
-        if (this.world.isSwamp(tx, tz) && walker.playerIndex !== -1) {
-          walker.population = Math.max(0, walker.population - 1);
+        if (this.world.isSwamp(tx, tz)) {
+          walker.population = Math.max(0, walker.population - 2);
         }
       }
 
@@ -183,7 +271,7 @@ export class Game {
       const newWalkers: Walker[] = [];
       for (const settlement of player.settlements) {
         settlement.updateFlatArea(this.world, this.gameTime);
-        const newWalker = settlement.update(this.world, dt);
+        const newWalker = settlement.update(this.world, dt, player.behaviorMode);
         if (newWalker) {
           newWalkers.push(newWalker);
         }
@@ -238,11 +326,24 @@ export class Game {
         break;
       }
       case 'PLACE_MAGNET': {
-        player.magnetX = action.x!;
-        player.magnetZ = action.z!;
+        // Per manual: can only move papal magnet if you have a leader
+        const leader = player.getLeader();
+        if (leader || player.walkers.length === 0) {
+          // Allow magnet placement if has leader OR has no walkers (initial setup)
+          player.magnetX = action.x!;
+          player.magnetZ = action.z!;
+        }
+        break;
+      }
+      case 'SET_BEHAVIOR': {
+        if (!this.armageddonActive) {
+          player.behaviorMode = action.behaviorMode!;
+        }
         break;
       }
       case 'USE_POWER': {
+        if (this.armageddonActive) break; // No powers during Armageddon
+
         const powerType = action.power as PowerType;
         const opponent = this.players[action.player === 0 ? 1 : 0];
         const success = Powers.usePower(powerType, action.x!, action.z!, player, opponent, this.world);
@@ -261,10 +362,13 @@ export class Game {
     const tx = walker.getTileX();
     const tz = walker.getTileZ();
 
-    // Check there isn't already a settlement here
+    // Check there isn't already a settlement on this tile or too close
     for (const p of this.players) {
       for (const s of p.settlements) {
         if (s.x === tx && s.z === tz) return;
+        // Enforce minimum distance between settlements
+        const dist = wrappedDistance(tx + 0.5, tz + 0.5, s.x + 0.5, s.z + 0.5);
+        if (dist < MIN_SETTLEMENT_DISTANCE) return;
       }
     }
 
@@ -347,17 +451,17 @@ export class Game {
       }
     }
 
-    // Draw settlements
+    // Draw settlements (white for good, dark grey for evil — per manual)
     for (const player of this.players) {
-      ctx.fillStyle = player.playerIndex === 0 ? '#4488ff' : '#ff4444';
+      ctx.fillStyle = player.playerIndex === 0 ? '#ffffff' : '#666666';
       for (const s of player.settlements) {
         ctx.fillRect(s.x * scale - 1, s.z * scale - 1, 3, 3);
       }
     }
 
-    // Draw walkers as dots
+    // Draw walkers as dots (blue for good, red for evil — per manual)
     for (const player of this.players) {
-      ctx.fillStyle = player.playerIndex === 0 ? '#88bbff' : '#ff8888';
+      ctx.fillStyle = player.playerIndex === 0 ? '#4488ff' : '#ff4444';
       for (const w of player.walkers) {
         ctx.fillRect(w.x * scale, w.z * scale, 2, 2);
       }
@@ -386,6 +490,11 @@ export class Game {
     }
   }
 
+  /** Set behavior mode for human player */
+  setBehaviorMode(mode: BehaviorMode): void {
+    this.executeAction({ type: 'SET_BEHAVIOR', player: 0, behaviorMode: mode });
+  }
+
   getHumanPlayer(): Player {
     return this.players[0];
   }
@@ -404,6 +513,10 @@ export class Game {
 
   getWorld(): World {
     return this.world;
+  }
+
+  isArmageddonActive(): boolean {
+    return this.armageddonActive;
   }
 
   zoomCamera(delta: number): void {
