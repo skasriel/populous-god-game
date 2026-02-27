@@ -13,15 +13,10 @@
     #game-canvas { width: 100%; height: 100%; display: block; }
 
     /* ═══════════════════════════════════════════
-       Populous-style UI — matching original layout
-       Minimap: upper-left
-       Command grid: left side, below minimap
-       Powers shelf: top center, hanging down
-       Status shield: upper right
-       Utility icons: bottom right
+       Populous-style UI — single left panel
        ═══════════════════════════════════════════ */
 
-    /* ── Minimap (UPPER LEFT — like original) ── */
+    /* ── Minimap (UPPER LEFT) ── */
     #minimap-frame {
       position: absolute;
       top: 0; left: 0;
@@ -37,101 +32,98 @@
       display: block;
     }
 
-    /* ── Left Command Panel (below minimap) ── */
-    #cmd-panel {
+    /* ── Combined Control Panel (below minimap, left side) ── */
+    #control-panel {
       position: absolute;
       top: 96px; left: 0;
-      width: 172px;
+      width: 200px;
       background: #1a1610;
       border: 2px solid #5a4a30;
       border-left: none;
       z-index: 10;
+      display: flex;
+      flex-direction: column;
+      padding: 3px;
+      gap: 3px;
+    }
+
+    /* Section divider within the panel */
+    .panel-section-label {
+      font-size: 8px;
+      color: #706040;
+      letter-spacing: 2px;
+      text-align: center;
+      padding: 2px 0 1px;
+      border-bottom: 1px solid #3a3020;
+    }
+
+    /* Grid of command buttons (terrain + behavior) */
+    .cmd-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(5, 1fr);
       gap: 1px;
-      padding: 3px;
     }
     .cmd-btn {
       background: #2a2418;
       border: 1px solid #4a3a28;
       color: #b0a888;
-      font-size: 16px;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0px;
-      padding: 2px 0;
+      gap: 1px;
+      padding: 4px 0;
       transition: background 0.1s;
     }
     .cmd-btn:hover { background: #3a3020; border-color: #8a7a50; }
     .cmd-btn.active { background: #4a3a18; border-color: #c0a040; color: #fff; }
-    .cmd-btn .cmd-icon { font-size: 18px; line-height: 1; }
-    .cmd-btn .cmd-label { font-size: 6px; color: #706848; letter-spacing: 0.5px; }
+    .cmd-btn .cmd-icon { font-size: 22px; line-height: 1; }
+    .cmd-btn .cmd-label { font-size: 8px; color: #908060; letter-spacing: 0.5px; }
 
-    /* ── Mana Gauge (below command panel) ── */
-    #mana-gauge {
-      position: absolute;
-      top: 282px; left: 0;
-      width: 172px;
-      background: #1a1610;
-      border: 2px solid #5a4a30;
-      border-left: none; border-top: none;
-      padding: 4px 6px;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    #mana-gauge .mana-label { font-size: 7px; color: #8a7a50; letter-spacing: 1px; }
-    #mana-bar-bg { flex: 1; height: 8px; background: #0a0808; border: 1px solid #5a4a30; }
-    #mana-bar { height: 100%; background: linear-gradient(to right, #4a3a00, #c0a040); width: 10%; transition: width 0.3s; }
-    #mana-value { font-size: 9px; color: #c0a050; min-width: 24px; text-align: right; }
-
-    /* ── Divine Powers Shelf (top center, hanging down) ── */
-    #powers-shelf {
-      position: absolute;
-      top: 0;
-      left: 50%; transform: translateX(-50%);
-      display: flex; align-items: flex-start;
-      z-index: 10;
-    }
-    #powers-shelf-bg {
-      background: linear-gradient(to bottom, #6a5030, #4a3820);
-      border: 2px solid #8a6a40; border-top: none;
-      border-radius: 0 0 6px 6px;
-      padding: 6px 8px 8px;
-      display: flex; gap: 3px; align-items: flex-end;
-    }
-    .shelf-pillar {
-      width: 8px; height: 56px;
-      background: linear-gradient(to right, #8a6a40, #c0a050, #8a6a40);
-      border-radius: 0 0 2px 2px;
+    /* Divine powers row (same grid but styled slightly different) */
+    .power-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
     }
     .power-btn {
-      width: 44px; height: 46px;
       background: #2a2218;
-      border: 1px solid #6a5a30;
-      color: #c0a050; font-size: 9px;
+      border: 1px solid #5a4a28;
+      color: #c0a050;
       cursor: pointer;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 1px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      padding: 3px 0;
       transition: border-color 0.15s, background 0.15s;
     }
     .power-btn:hover { border-color: #c0a050; background: #3a3020; }
     .power-btn.active { border-color: #e0c060; background: #4a3a10; box-shadow: 0 0 6px rgba(224,192,96,0.4); }
     .power-btn.disabled { opacity: 0.3; cursor: default; }
-    .power-btn .icon { font-size: 18px; line-height: 1; color: #c0a050; }
-    .power-btn .pname { font-size: 6px; color: #8a7a50; }
-    .power-btn .cost { font-size: 6px; color: #6a5a40; }
+    .power-btn .icon { font-size: 20px; line-height: 1; color: #c0a050; }
+    .power-btn .pname { font-size: 8px; color: #8a7a50; }
+    .power-btn .cost { font-size: 7px; color: #6a5a40; }
+
+    /* ── Mana Gauge (inside panel, at bottom) ── */
+    .mana-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 2px;
+    }
+    .mana-row .mana-label { font-size: 9px; color: #8a7a50; letter-spacing: 1px; }
+    #mana-bar-bg { flex: 1; height: 10px; background: #0a0808; border: 1px solid #5a4a30; }
+    #mana-bar { height: 100%; background: linear-gradient(to right, #4a3a00, #c0a040); width: 10%; transition: width 0.3s; }
+    #mana-value { font-size: 11px; color: #c0a050; min-width: 28px; text-align: right; }
 
     /* ── Status Shield (upper right) ── */
     #status-panel {
       position: absolute;
       top: 0; right: 0;
-      width: 90px; height: 100px;
+      width: 100px; height: 110px;
       background: #4a1010;
       border: 2px solid #8a3020;
       border-top: none; border-right: none;
@@ -139,16 +131,16 @@
       z-index: 10;
       display: flex; flex-direction: column;
       align-items: center;
-      padding: 6px 4px; gap: 3px;
+      padding: 6px 6px; gap: 4px;
     }
-    #status-panel .shield-icon { font-size: 24px; color: #ddd; }
-    .pop-row { display: flex; align-items: center; gap: 3px; font-size: 10px; width: 100%; }
-    .pop-row .pop-label { width: 16px; text-align: center; font-size: 10px; font-weight: bold; }
+    #status-panel .shield-icon { font-size: 26px; color: #ddd; }
+    .pop-row { display: flex; align-items: center; gap: 3px; font-size: 11px; width: 100%; }
+    .pop-row .pop-label { width: 16px; text-align: center; font-size: 13px; font-weight: bold; }
     .pop-bar-bg { flex: 1; height: 8px; background: #1a0808; border: 1px solid #5a2020; }
     .pop-bar-fill { height: 100%; transition: width 0.3s; }
     .pop-bar-fill.player { background: #4488ff; }
     .pop-bar-fill.enemy { background: #ff4444; }
-    .pop-count { font-size: 9px; width: 22px; text-align: right; }
+    .pop-count { font-size: 11px; width: 24px; text-align: right; }
 
     /* ── Bottom-right Utility Icons ── */
     #utility-bar {
@@ -164,7 +156,7 @@
     }
     .util-btn {
       background: none; border: none;
-      color: #8a7a50; font-size: 13px;
+      color: #8a7a50; font-size: 15px;
       cursor: pointer; font-family: 'Courier New', monospace;
     }
     .util-btn:hover { color: #c0a050; }
@@ -172,10 +164,10 @@
     /* ── Mode indicator (bottom center) ── */
     #mode-indicator {
       position: absolute;
-      bottom: 6px; left: 178px; right: 120px;
-      color: #c0a050; font-size: 10px;
+      bottom: 6px; left: 206px; right: 100px;
+      color: #c0a050; font-size: 11px;
       background: rgba(26,22,16,0.85);
-      padding: 3px 10px;
+      padding: 4px 10px;
       border: 1px solid #4a3a28;
       white-space: nowrap; z-index: 10;
       text-align: center;
@@ -207,89 +199,59 @@
     <canvas id="minimap" width="80" height="80"></canvas>
   </div>
 
-  <!-- ── Left Command Panel (below minimap) ── -->
-  <div id="cmd-panel">
-    <!-- Row 1: Combat / behavior (matching original top row: skull, crossed, broadcast) -->
-    <button class="cmd-btn" id="cmd-fight" title="Fight mode">
-      <span class="cmd-icon">&#x2620;</span>
-      <span class="cmd-label">FIGHT</span>
-    </button>
-    <button class="cmd-btn" id="cmd-gather" title="Gather followers">
-      <span class="cmd-icon">&#x2694;</span>
-      <span class="cmd-label">GATHER</span>
-    </button>
-    <button class="cmd-btn" id="cmd-magnet" title="Papal Magnet (M)">
-      <span class="cmd-icon">(&#xB7;)</span>
-      <span class="cmd-label">MAGNET</span>
-    </button>
-    <!-- Row 2: Settle + compass-like directional area -->
-    <button class="cmd-btn" id="cmd-settle" title="Settle followers">
-      <span class="cmd-icon">&#x2302;</span>
-      <span class="cmd-label">SETTLE</span>
-    </button>
-    <button class="cmd-btn" id="cmd-raise" title="Raise Terrain (Left Click)">
-      <span class="cmd-icon">&#x25B2;</span>
-      <span class="cmd-label">RAISE</span>
-    </button>
-    <button class="cmd-btn" id="cmd-lower" title="Lower Terrain (Right Click)">
-      <span class="cmd-icon">&#x25BC;</span>
-      <span class="cmd-label">LOWER</span>
-    </button>
-    <!-- Row 3: Arrows / navigation (like original compass row) -->
-    <button class="cmd-btn" id="cmd-zoom-out" title="Zoom Out">
-      <span class="cmd-icon">&#x2190;</span>
-      <span class="cmd-label">ZOOM-</span>
-    </button>
-    <button class="cmd-btn" id="cmd-center" title="Center view">
-      <span class="cmd-icon">&#x25C7;</span>
-      <span class="cmd-label">CENTER</span>
-    </button>
-    <button class="cmd-btn" id="cmd-zoom-in" title="Zoom In">
-      <span class="cmd-icon">&#x2192;</span>
-      <span class="cmd-label">ZOOM+</span>
-    </button>
-    <!-- Row 4: Person icons (matching original bottom rows) -->
-    <button class="cmd-btn" id="cmd-query" title="Query tile">
-      <span class="cmd-icon">&#x2020;</span>
-      <span class="cmd-label">QUERY</span>
-    </button>
-    <button class="cmd-btn" id="cmd-flag" title="Set flag">
-      <span class="cmd-icon">&#x2691;</span>
-      <span class="cmd-label">FLAG</span>
-    </button>
-    <button class="cmd-btn" id="cmd-info" title="Info">
-      <span class="cmd-icon">?</span>
-      <span class="cmd-label">INFO</span>
-    </button>
-    <!-- Row 5: More icons (matching original bottom row) -->
-    <button class="cmd-btn" id="cmd-speed" title="Game Speed">
-      <span class="cmd-icon">&#x23E9;</span>
-      <span class="cmd-label">SPEED</span>
-    </button>
-    <button class="cmd-btn" id="cmd-sound" title="Sound toggle">
-      <span class="cmd-icon">&#x266B;</span>
-      <span class="cmd-label">SOUND</span>
-    </button>
-    <button class="cmd-btn" id="cmd-globe" title="Overview">
-      <span class="cmd-icon">&#x2316;</span>
-      <span class="cmd-label">VIEW</span>
-    </button>
-  </div>
-
-  <!-- ── Mana Gauge (below command panel) ── -->
-  <div id="mana-gauge">
-    <span class="mana-label">MANA</span>
-    <div id="mana-bar-bg"><div id="mana-bar"></div></div>
-    <span id="mana-value">0</span>
-  </div>
-
-  <!-- ── Divine Powers Shelf (top center, hanging down) ── -->
-  <div id="powers-shelf">
-    <div class="shelf-pillar"></div>
-    <div id="powers-shelf-bg">
-      <div id="powers-bar"></div>
+  <!-- ── Combined Control Panel (below minimap) ── -->
+  <div id="control-panel">
+    <!-- Behavior / combat row -->
+    <div class="panel-section-label">COMMAND</div>
+    <div class="cmd-grid">
+      <button class="cmd-btn" id="cmd-fight" title="Fight mode">
+        <span class="cmd-icon">&#x2620;</span>
+        <span class="cmd-label">FIGHT</span>
+      </button>
+      <button class="cmd-btn" id="cmd-gather" title="Gather followers">
+        <span class="cmd-icon">&#x2694;</span>
+        <span class="cmd-label">GATHER</span>
+      </button>
+      <button class="cmd-btn" id="cmd-magnet" title="Papal Magnet (M)">
+        <span class="cmd-icon">(&#xB7;)</span>
+        <span class="cmd-label">MAGNET</span>
+      </button>
+      <button class="cmd-btn" id="cmd-settle" title="Settle followers">
+        <span class="cmd-icon">&#x2302;</span>
+        <span class="cmd-label">SETTLE</span>
+      </button>
+      <button class="cmd-btn" id="cmd-raise" title="Raise Terrain (Left Click)">
+        <span class="cmd-icon">&#x25B2;</span>
+        <span class="cmd-label">RAISE</span>
+      </button>
+      <button class="cmd-btn" id="cmd-lower" title="Lower Terrain (Right Click)">
+        <span class="cmd-icon">&#x25BC;</span>
+        <span class="cmd-label">LOWER</span>
+      </button>
+      <button class="cmd-btn" id="cmd-zoom-out" title="Zoom Out">
+        <span class="cmd-icon">&#x2296;</span>
+        <span class="cmd-label">ZOOM-</span>
+      </button>
+      <button class="cmd-btn" id="cmd-center" title="Center view">
+        <span class="cmd-icon">&#x25C7;</span>
+        <span class="cmd-label">CENTER</span>
+      </button>
+      <button class="cmd-btn" id="cmd-zoom-in" title="Zoom In">
+        <span class="cmd-icon">&#x2295;</span>
+        <span class="cmd-label">ZOOM+</span>
+      </button>
     </div>
-    <div class="shelf-pillar"></div>
+
+    <!-- Divine powers -->
+    <div class="panel-section-label">DIVINE POWERS</div>
+    <div class="power-grid" id="powers-bar"></div>
+
+    <!-- Mana gauge -->
+    <div class="mana-row">
+      <span class="mana-label">MANA</span>
+      <div id="mana-bar-bg"><div id="mana-bar"></div></div>
+      <span id="mana-value">0</span>
+    </div>
   </div>
 
   <!-- ── Status Shield (upper right) ── -->
