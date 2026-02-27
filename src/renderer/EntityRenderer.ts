@@ -3,31 +3,126 @@ import { World } from '../game/World';
 import { Walker, WalkerState } from '../game/Walker';
 import { Settlement } from '../game/Settlement';
 import { PLAYER_COLOR, ENEMY_COLOR, TILE_SIZE, BUILDING_TIERS } from '../utils/Constants';
+import { H_SCALE } from './TerrainRenderer';
 
-interface EntityMesh {
-  mesh: THREE.Object3D;
-  id: number;
+// Sprite path prefix
+const SP = '/sprites/Populous-SMS-';
+
+// Town level sprite filenames (8 levels, Grassy Plains theme)
+const TOWN_SPRITES = [
+  `${SP}Townlevel1-GrassyPlains.png`,
+  `${SP}Townlevel2-GrassyPlains.png`,
+  `${SP}Townlevel3-GrassyPlains.png`,
+  `${SP}Townlevel4-GrassyPlains.png`,
+  `${SP}Townlevel5-GrassyPlains.png`,
+  `${SP}Townlevel6-GrassyPlains.png`,
+  `${SP}Townlevel7-GrassyPlains.png`,
+  `${SP}Townlevel8-GrassyPlains.png`,
+];
+
+// Castle wall sprites
+const CASTLE_WALL_A = `${SP}CastlewallA-GrassyPlains.png`;
+const CASTLE_WALL_B = `${SP}CastlewallB-GrassyPlains.png`;
+
+// Follower sprites
+const FOLLOWER_GOOD = `${SP}FollowerGood-WalkingSouth.png`;
+const FOLLOWER_EVIL = `${SP}FollowerEvil-WalkingSouth.png`;
+
+// Papal magnet sprites
+const MAGNET_GOOD = `${SP}PapalmagnetGood-GrassyPlains.png`;
+const MAGNET_EVIL = `${SP}PapalmagnetEvil-GrassyPlains.png`;
+
+// Tree sprites
+const TREE_SPRITES = [
+  `${SP}TreeA-GrassyPlains.png`,
+  `${SP}TreeB-GrassyPlains.png`,
+  `${SP}TreeC-GrassyPlains.png`,
+];
+
+// Rock sprites
+const ROCK_HARD = `${SP}Rockhard-GrassyPlains.png`;
+const ROCK_SOFT = `${SP}Rocksoft-GrassyPlains.png`;
+
+// Map our 4 building tiers to town level sprites (0-indexed)
+// Tier 0 → levels 1-2, Tier 1 → levels 3-4, Tier 2 → levels 5-6, Tier 3 → levels 7-8
+const TIER_TO_LEVELS: [number, number][] = [
+  [0, 1], // Tier 0: town levels 1-2
+  [2, 3], // Tier 1: town levels 3-4
+  [4, 5], // Tier 2: town levels 5-6
+  [6, 7], // Tier 3: town levels 7-8
+];
+
+// Scale factor: how many world units per pixel
+// Buildings are ~30px wide and should span ~0.8 world units
+const BUILDING_PX_SCALE = 0.028;
+// Walkers are 8px wide and should be ~0.2 world units
+const WALKER_PX_SCALE = 0.025;
+// Papal magnets
+const MAGNET_PX_SCALE = 0.03;
+
+function loadTexture(path: string): THREE.Texture {
+  const loader = new THREE.TextureLoader();
+  const tex = loader.load(path);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
+
+function createSprite(texture: THREE.Texture, pxWidth: number, pxHeight: number, pxScale: number, tintColor?: THREE.Color): THREE.Sprite {
+  const mat = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    alphaTest: 0.1,
+    color: tintColor || new THREE.Color(0xffffff),
+  });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(pxWidth * pxScale, pxHeight * pxScale, 1);
+  return sprite;
+}
+
+// Enemy tint — red-ish multiply on the sprite texture
+const ENEMY_TINT = new THREE.Color(0xff6666);
 
 export class EntityRenderer {
   private scene: THREE.Scene;
   private world: World;
-  private walkerMeshes: Map<number, THREE.Object3D> = new Map();
+  private walkerMeshes: Map<number, THREE.Sprite> = new Map();
   private settlementMeshes: Map<number, THREE.Object3D> = new Map();
-  private magnetMeshes: Map<number, THREE.Object3D> = new Map();
+  private magnetMeshes: Map<number, THREE.Sprite> = new Map();
 
-  // Shared geometries for performance
-  private walkerGeo: THREE.ConeGeometry;
-  private playerMat: THREE.MeshLambertMaterial;
-  private enemyMat: THREE.MeshLambertMaterial;
+  // Preloaded textures
+  private townTextures: THREE.Texture[] = [];
+  private wallTexA: THREE.Texture;
+  private wallTexB: THREE.Texture;
+  private followerGoodTex: THREE.Texture;
+  private followerEvilTex: THREE.Texture;
+  private magnetGoodTex: THREE.Texture;
+  private magnetEvilTex: THREE.Texture;
+
+  // Sprite pixel dimensions (approximate, from the actual files)
+  private townSizes: [number, number][] = [
+    [30, 22], [30, 22], [31, 24], [32, 24],
+    [32, 24], [32, 23], [30, 22], [24, 24],
+  ];
+  private followerSize: [number, number] = [8, 16];
+  private magnetGoodSize: [number, number] = [16, 24];
+  private magnetEvilSize: [number, number] = [32, 24];
+  private wallSizeA: [number, number] = [23, 20];
+  private wallSizeB: [number, number] = [23, 20];
 
   constructor(scene: THREE.Scene, world: World) {
     this.scene = scene;
     this.world = world;
 
-    this.walkerGeo = new THREE.ConeGeometry(0.25, 0.6, 6);
-    this.playerMat = new THREE.MeshLambertMaterial({ color: PLAYER_COLOR });
-    this.enemyMat = new THREE.MeshLambertMaterial({ color: ENEMY_COLOR });
+    // Preload all textures
+    this.townTextures = TOWN_SPRITES.map(path => loadTexture(path));
+    this.wallTexA = loadTexture(CASTLE_WALL_A);
+    this.wallTexB = loadTexture(CASTLE_WALL_B);
+    this.followerGoodTex = loadTexture(FOLLOWER_GOOD);
+    this.followerEvilTex = loadTexture(FOLLOWER_EVIL);
+    this.magnetGoodTex = loadTexture(MAGNET_GOOD);
+    this.magnetEvilTex = loadTexture(MAGNET_EVIL);
   }
 
   updateWalkers(walkers: Walker[], playerIndex: number): void {
@@ -35,39 +130,62 @@ export class EntityRenderer {
 
     for (const walker of walkers) {
       activeIds.add(walker.id);
-      let mesh = this.walkerMeshes.get(walker.id);
+      let sprite = this.walkerMeshes.get(walker.id);
 
-      if (!mesh) {
-        // Create new walker mesh
-        const mat = walker.playerIndex === 0 ? this.playerMat : this.enemyMat;
-        const cone = new THREE.Mesh(this.walkerGeo, mat);
-        // Scale based on population
-        const group = new THREE.Group();
-        group.add(cone);
-        this.scene.add(group);
-        this.walkerMeshes.set(walker.id, group);
-        mesh = group;
+      if (!sprite) {
+        const tex = walker.playerIndex === 0 ? this.followerGoodTex : this.followerEvilTex;
+        const tint = walker.playerIndex !== 0 ? ENEMY_TINT : undefined;
+        sprite = createSprite(tex, this.followerSize[0], this.followerSize[1], WALKER_PX_SCALE, tint);
+        this.scene.add(sprite);
+        this.walkerMeshes.set(walker.id, sprite);
+        sprite.userData = { isKnight: walker.isKnight, playerIndex: walker.playerIndex };
       }
 
-      // Update position
-      const y = this.world.getHeightInterpolated(walker.x, walker.z) * TILE_SIZE * 0.5;
-      mesh.position.set(walker.x, y + 0.3, walker.z);
+      // Recreate if knight status changed (knights are slightly larger/tinted)
+      if ((sprite.userData as any).isKnight !== walker.isKnight) {
+        this.scene.remove(sprite);
+        const tex = walker.playerIndex === 0 ? this.followerGoodTex : this.followerEvilTex;
+        const tint = walker.playerIndex !== 0 ? ENEMY_TINT : undefined;
+        sprite = createSprite(tex, this.followerSize[0], this.followerSize[1], WALKER_PX_SCALE, tint);
+        if (walker.isKnight) {
+          // Knights are larger
+          sprite.scale.multiplyScalar(1.5);
+        }
+        sprite.userData = { isKnight: walker.isKnight, playerIndex: walker.playerIndex };
+        this.scene.add(sprite);
+        this.walkerMeshes.set(walker.id, sprite);
+      }
 
-      // Scale based on population
-      const scale = 0.5 + (walker.population / 20) * 0.5;
-      mesh.scale.setScalar(Math.min(scale, 1.5));
+      // Position on flat tile surface — sprite center is at its center,
+      // so offset Y by half the sprite height
+      const tileH = this.world.getHeight(Math.floor(walker.x), Math.floor(walker.z));
+      const y = tileH * H_SCALE;
+      const spriteH = this.followerSize[1] * WALKER_PX_SCALE * (walker.isKnight ? 1.5 : 1);
+      sprite.position.set(walker.x, y + spriteH / 2, walker.z);
 
-      // Pulse when fighting
+      // Scale slightly with population
+      const popScale = 0.9 + (walker.population / 25) * 0.4;
+      const baseScale = walker.isKnight ? 1.5 : 1.0;
+      const s = Math.min(popScale, 1.5) * baseScale;
+      sprite.scale.set(
+        this.followerSize[0] * WALKER_PX_SCALE * s,
+        this.followerSize[1] * WALKER_PX_SCALE * s,
+        1
+      );
+
+      // Flash when fighting
       if (walker.state === WalkerState.FIGHTING) {
-        const pulse = 1 + Math.sin(Date.now() * 0.01) * 0.2;
-        mesh.scale.multiplyScalar(pulse);
+        const flash = Math.sin(Date.now() * 0.02) > 0;
+        sprite.visible = flash;
+      } else {
+        sprite.visible = true;
       }
     }
 
-    // Remove meshes for dead walkers
-    for (const [id, mesh] of this.walkerMeshes) {
+    // Remove dead
+    for (const [id, sprite] of this.walkerMeshes) {
       if (!activeIds.has(id)) {
-        this.scene.remove(mesh);
+        this.scene.remove(sprite);
         this.walkerMeshes.delete(id);
       }
     }
@@ -78,83 +196,53 @@ export class EntityRenderer {
 
     for (const settlement of settlements) {
       activeIds.add(settlement.id);
-      let mesh = this.settlementMeshes.get(settlement.id);
-
+      let obj = this.settlementMeshes.get(settlement.id);
       const tier = settlement.getTier();
-      const tierData = BUILDING_TIERS[tier];
 
-      if (!mesh) {
-        mesh = this.createBuildingMesh(settlement, tier);
-        this.scene.add(mesh);
-        this.settlementMeshes.set(settlement.id, mesh);
+      // Determine which town level sprite to use
+      // Use population ratio within the tier to pick between the two levels
+      const [lowLevel, highLevel] = TIER_TO_LEVELS[tier];
+      const tierMaxPop = BUILDING_TIERS[tier].maxPop;
+      const popRatio = settlement.population / tierMaxPop;
+      const levelIdx = popRatio > 0.5 ? highLevel : lowLevel;
+
+      if (!obj) {
+        obj = this.createBuildingSprite(levelIdx, tier, settlement.playerIndex);
+        this.scene.add(obj);
+        this.settlementMeshes.set(settlement.id, obj);
       }
 
-      // Update building if tier changed - check userData
-      if ((mesh.userData as any).tier !== tier) {
-        this.scene.remove(mesh);
-        mesh = this.createBuildingMesh(settlement, tier);
-        this.scene.add(mesh);
-        this.settlementMeshes.set(settlement.id, mesh);
+      // Rebuild if tier or level changed
+      if ((obj.userData as any).tier !== tier || (obj.userData as any).levelIdx !== levelIdx) {
+        this.scene.remove(obj);
+        obj = this.createBuildingSprite(levelIdx, tier, settlement.playerIndex);
+        this.scene.add(obj);
+        this.settlementMeshes.set(settlement.id, obj);
       }
 
-      // Update position
-      const y = this.world.getHeight(settlement.x, settlement.z) * TILE_SIZE * 0.5;
-      mesh.position.set(settlement.x + 0.5, y, settlement.z + 0.5);
+      // Position on flat tile
+      const y = this.world.getHeight(settlement.x, settlement.z) * H_SCALE;
+      const [pw, ph] = this.townSizes[levelIdx];
+      const spriteH = ph * BUILDING_PX_SCALE;
+      obj.position.set(settlement.x + 0.5, y + spriteH / 2, settlement.z + 0.5);
     }
 
-    // Remove meshes for destroyed settlements
-    for (const [id, mesh] of this.settlementMeshes) {
+    // Remove destroyed
+    for (const [id, obj] of this.settlementMeshes) {
       if (!activeIds.has(id)) {
-        this.scene.remove(mesh);
+        this.scene.remove(obj);
         this.settlementMeshes.delete(id);
       }
     }
   }
 
-  private createBuildingMesh(settlement: Settlement, tier: number): THREE.Object3D {
-    const tierData = BUILDING_TIERS[tier];
-    const group = new THREE.Group();
-
-    const isPlayer = settlement.playerIndex === 0;
-    const baseColor = isPlayer ? PLAYER_COLOR : ENEMY_COLOR;
-
-    // Building body
-    const sizes = [
-      { w: 0.4, h: 0.3, d: 0.4 }, // Hut
-      { w: 0.55, h: 0.45, d: 0.55 }, // House
-      { w: 0.7, h: 0.6, d: 0.7 }, // Manor
-      { w: 0.85, h: 0.8, d: 0.85 }, // Castle
-    ];
-    const s = sizes[tier];
-
-    // Main body
-    const bodyGeo = new THREE.BoxGeometry(s.w, s.h, s.d);
-    const bodyMat = new THREE.MeshLambertMaterial({ color: tierData.color });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = s.h / 2;
-    group.add(body);
-
-    // Roof (pyramid)
-    const roofGeo = new THREE.ConeGeometry(s.w * 0.7, s.h * 0.5, 4);
-    const roofMat = new THREE.MeshLambertMaterial({ color: baseColor });
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.y = s.h + s.h * 0.25;
-    roof.rotation.y = Math.PI / 4;
-    group.add(roof);
-
-    // For castles, add turrets
-    if (tier >= 3) {
-      const turretGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.5, 6);
-      const turretMat = new THREE.MeshLambertMaterial({ color: baseColor });
-      for (const [tx, tz] of [[0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]]) {
-        const turret = new THREE.Mesh(turretGeo, turretMat);
-        turret.position.set(tx, s.h + 0.25, tz);
-        group.add(turret);
-      }
-    }
-
-    group.userData = { tier };
-    return group;
+  private createBuildingSprite(levelIdx: number, tier: number, playerIndex: number): THREE.Sprite {
+    const tex = this.townTextures[levelIdx];
+    const [pw, ph] = this.townSizes[levelIdx];
+    const tint = playerIndex !== 0 ? ENEMY_TINT : undefined;
+    const sprite = createSprite(tex, pw, ph, BUILDING_PX_SCALE, tint);
+    sprite.userData = { tier, levelIdx };
+    return sprite;
   }
 
   updatePapalMagnets(magnets: { x: number; z: number; playerIndex: number }[]): void {
@@ -163,47 +251,44 @@ export class EntityRenderer {
     for (let i = 0; i < magnets.length; i++) {
       const m = magnets[i];
       activeIds.add(i);
-      let mesh = this.magnetMeshes.get(i);
+      let sprite = this.magnetMeshes.get(i);
 
-      if (!mesh) {
-        const group = new THREE.Group();
-        const poleGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.5, 6);
-        const color = m.playerIndex === 0 ? PLAYER_COLOR : ENEMY_COLOR;
-        const poleMat = new THREE.MeshLambertMaterial({ color });
-        const pole = new THREE.Mesh(poleGeo, poleMat);
-        pole.position.y = 0.75;
-        group.add(pole);
-
-        // Flag
-        const flagGeo = new THREE.PlaneGeometry(0.5, 0.3);
-        const flagMat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide });
-        const flag = new THREE.Mesh(flagGeo, flagMat);
-        flag.position.set(0.25, 1.3, 0);
-        group.add(flag);
-
-        this.scene.add(group);
-        this.magnetMeshes.set(i, group);
-        mesh = group;
+      if (!sprite) {
+        const isGood = m.playerIndex === 0;
+        const tex = isGood ? this.magnetGoodTex : this.magnetEvilTex;
+        const [pw, ph] = isGood ? this.magnetGoodSize : this.magnetEvilSize;
+        sprite = createSprite(tex, pw, ph, MAGNET_PX_SCALE);
+        this.scene.add(sprite);
+        this.magnetMeshes.set(i, sprite);
       }
 
-      const y = this.world.getHeight(Math.floor(m.x), Math.floor(m.z)) * TILE_SIZE * 0.5;
-      mesh.position.set(m.x + 0.5, y, m.z + 0.5);
+      const y = this.world.getHeight(Math.floor(m.x), Math.floor(m.z)) * H_SCALE;
+      const isGood = m.playerIndex === 0;
+      const [, ph] = isGood ? this.magnetGoodSize : this.magnetEvilSize;
+      const spriteH = ph * MAGNET_PX_SCALE;
+      sprite.position.set(m.x + 0.5, y + spriteH / 2, m.z + 0.5);
     }
 
-    for (const [id, mesh] of this.magnetMeshes) {
+    for (const [id, sprite] of this.magnetMeshes) {
       if (!activeIds.has(id)) {
-        this.scene.remove(mesh);
+        this.scene.remove(sprite);
         this.magnetMeshes.delete(id);
       }
     }
   }
 
   dispose(): void {
-    this.walkerGeo.dispose();
-    this.playerMat.dispose();
-    this.enemyMat.dispose();
-    for (const mesh of this.walkerMeshes.values()) this.scene.remove(mesh);
-    for (const mesh of this.settlementMeshes.values()) this.scene.remove(mesh);
-    for (const mesh of this.magnetMeshes.values()) this.scene.remove(mesh);
+    // Dispose textures
+    for (const tex of this.townTextures) tex.dispose();
+    this.wallTexA.dispose();
+    this.wallTexB.dispose();
+    this.followerGoodTex.dispose();
+    this.followerEvilTex.dispose();
+    this.magnetGoodTex.dispose();
+    this.magnetEvilTex.dispose();
+    // Remove meshes from scene
+    for (const sprite of this.walkerMeshes.values()) this.scene.remove(sprite);
+    for (const obj of this.settlementMeshes.values()) this.scene.remove(obj);
+    for (const sprite of this.magnetMeshes.values()) this.scene.remove(sprite);
   }
 }

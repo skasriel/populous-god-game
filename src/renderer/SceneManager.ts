@@ -9,13 +9,13 @@ export class SceneManager {
   private cameraTarget: THREE.Vector3;
 
   // Camera panning state
-  private panVelocity = { x: 0, z: 0 };
   private keysDown = new Set<string>();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a3a5c);
+    // Deep blue background — matching Populous ocean/sky
+    this.scene.background = new THREE.Color(0x0c2870);
 
     // Orthographic camera for isometric view
     const aspect = window.innerWidth / window.innerHeight;
@@ -26,7 +26,7 @@ export class SceneManager {
       0.1, 1000
     );
 
-    // Classic isometric angle: rotate 45° around Y, tilt ~35.264° (arctan(1/√2))
+    // Classic isometric angle: rotate 45° around Y, tilt ~35.264° (arctan(1/sqrt(2)))
     const centerX = GRID_SIZE / 2;
     const centerZ = GRID_SIZE / 2;
     this.cameraTarget = new THREE.Vector3(centerX, 0, centerZ);
@@ -34,7 +34,7 @@ export class SceneManager {
     // Position camera at isometric angle
     const dist = 80;
     const angle = Math.PI / 4; // 45 degrees
-    const tilt = Math.atan(1 / Math.sqrt(2)); // ~35.264 degrees
+    const tilt = Math.atan(1 / Math.sqrt(2)); // ~35.264 degrees — true isometric
 
     this.camera.position.set(
       centerX + dist * Math.cos(tilt) * Math.sin(angle),
@@ -43,19 +43,13 @@ export class SceneManager {
     );
     this.camera.lookAt(this.cameraTarget);
 
-    // Renderer
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    // Renderer — no antialiasing for that crisp retro pixel look
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(1); // Force 1:1 pixel ratio for retro feel
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    this.scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(50, 80, 50);
-    directionalLight.castShadow = false;
-    this.scene.add(directionalLight);
+    // No dynamic lighting — using MeshBasicMaterial for flat-shaded retro look
+    // (all color comes from vertex colors / material color)
 
     // Handle resize
     window.addEventListener('resize', this.onResize.bind(this));
@@ -67,11 +61,9 @@ export class SceneManager {
 
   private onResize(): void {
     const aspect = window.innerWidth / window.innerHeight;
-    const zoom = CAMERA_ZOOM;
-    this.camera.left = -zoom * aspect;
-    this.camera.right = zoom * aspect;
-    this.camera.top = zoom;
-    this.camera.bottom = -zoom;
+    const currentZoom = this.camera.top;
+    this.camera.left = -currentZoom * aspect;
+    this.camera.right = currentZoom * aspect;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
@@ -84,9 +76,8 @@ export class SceneManager {
     if (this.keysDown.has('arrowdown') || this.keysDown.has('s')) dz += 1;
 
     if (dx !== 0 || dz !== 0) {
-      // Move in isometric-aligned directions
       const speed = CAMERA_PAN_SPEED * dt;
-      // The camera looks at 45 degrees, so pan along those axes
+      // Pan along isometric axes
       const moveX = (dx + dz) * speed * 0.707;
       const moveZ = (-dx + dz) * speed * 0.707;
 
@@ -97,7 +88,6 @@ export class SceneManager {
     }
   }
 
-  /** Zoom in/out by adjusting the orthographic camera */
   zoom(delta: number): void {
     const aspect = window.innerWidth / window.innerHeight;
     const currentZoom = this.camera.top;

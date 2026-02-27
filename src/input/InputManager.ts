@@ -139,8 +139,13 @@ export class InputManager {
   }
 
   selectPower(power: string): void {
-    this.mode = 'power';
-    this.selectedPower = power;
+    if (!power) {
+      this.mode = 'terrain';
+      this.selectedPower = null;
+    } else {
+      this.mode = 'power';
+      this.selectedPower = power;
+    }
   }
 
   getSelectedPower(): string | null {

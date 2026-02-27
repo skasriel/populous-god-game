@@ -53,7 +53,7 @@ export const TICK_RATE = 10; // game logic ticks per second
 export const TICK_INTERVAL = 1 / TICK_RATE;
 
 // ── Camera ──
-export const CAMERA_ZOOM = 20;
+export const CAMERA_ZOOM = 12;
 export const CAMERA_PAN_SPEED = 20;
 
 // ── AI ──
@@ -63,15 +63,15 @@ export const AI_TERRAIN_ACTIONS_PER_THINK = 3;
 // ── Colors ──
 export const PLAYER_COLOR = 0x4488ff;
 export const ENEMY_COLOR = 0xff4444;
-export const WATER_COLOR = 0x2266aa;
+export const WATER_COLOR = 0x1848b0;  // Brighter Populous blue
 export const TERRAIN_COLORS = [
-  0x2d5a1e, // height 0 (at sea level - beach)
-  0x3a7028, // height 1
-  0x4a8530, // height 2
-  0x5a9a38, // height 3
-  0x6aaf40, // height 4
-  0x7abf50, // height 5
-  0x8aaa60, // height 6
-  0x9a9570, // height 7
-  0xaa8a7a, // height 8 (peaks)
+  0xc2b280, // height 0 (sand/beach at sea level)
+  0x30b830, // height 1 — bright green
+  0x30b830, // height 2 — bright green (Populous uses uniform green)
+  0x30b830, // height 3
+  0x30b830, // height 4
+  0x30b830, // height 5
+  0x30b830, // height 6
+  0x30b830, // height 7 — still green (Populous doesn't vary by height)
+  0x30b830, // height 8
 ];

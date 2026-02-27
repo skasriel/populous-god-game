@@ -330,17 +330,18 @@ export class Game {
     const scale = size / GRID_SIZE;
     const heightmap = this.world.getHeightmap();
 
-    // Draw terrain
+    // Draw terrain — Populous style: uniform green land, blue water
     for (let x = 0; x < GRID_SIZE; x++) {
       for (let z = 0; z < GRID_SIZE; z++) {
         const h = heightmap[x][z];
         if (h <= 0) {
-          ctx.fillStyle = '#2266aa'; // water
+          ctx.fillStyle = '#1848b0'; // deep blue water
         } else if (this.world.isSwamp(x, z)) {
           ctx.fillStyle = '#445500'; // swamp
         } else {
-          const brightness = 40 + (h / 8) * 80;
-          ctx.fillStyle = `rgb(${brightness * 0.5}, ${brightness}, ${brightness * 0.3})`;
+          // Uniform bright green with very slight height variation
+          const g = 160 + Math.min(h * 8, 40);
+          ctx.fillStyle = `rgb(48, ${g}, 48)`;
         }
         ctx.fillRect(x * scale, z * scale, scale + 0.5, scale + 0.5);
       }
@@ -403,5 +404,9 @@ export class Game {
 
   getWorld(): World {
     return this.world;
+  }
+
+  zoomCamera(delta: number): void {
+    this.sceneManager.zoom(delta);
   }
 }
