@@ -53,12 +53,10 @@ const TIER_TO_LEVELS: [number, number][] = [
 ];
 
 // Scale factor: how many world units per pixel
-// Buildings are ~30px wide and should span ~0.8 world units
-const BUILDING_PX_SCALE = 0.028;
-// Walkers are 8px wide and should be ~0.2 world units
-const WALKER_PX_SCALE = 0.025;
-// Papal magnets
-const MAGNET_PX_SCALE = 0.03;
+// Larger = bigger sprites. Pixelated look is intentional (NearestFilter).
+const BUILDING_PX_SCALE = 0.055;  // Buildings fill ~1.5 tiles wide
+const WALKER_PX_SCALE = 0.05;     // Walkers clearly visible
+const MAGNET_PX_SCALE = 0.06;     // Magnets prominent
 
 function loadTexture(path: string): THREE.Texture {
   const loader = new THREE.TextureLoader();
