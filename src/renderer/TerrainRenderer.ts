@@ -3,19 +3,35 @@ import { World } from '../game/World';
 import * as THREE from 'three';
 
 // Height scale: each height unit = this many world units vertically
-const H_SCALE = 0.5;
+// Higher = more pronounced height steps, matching original Populous look
+const H_SCALE = 0.7;
 
 // ── Populous Color Palette ──
-// Grass: two alternating greens for dithered stipple pattern
-const GRASS_LIGHT = new THREE.Color(0x38c838);    // Light bright green
-const GRASS_DARK  = new THREE.Color(0x28a028);     // Slightly darker green
-// Brown cliffs: two shades for dithered slope pattern
-const CLIFF_LIGHT = new THREE.Color(0xc89048);     // Light brown/sandy
-const CLIFF_DARK  = new THREE.Color(0xa07030);      // Darker brown
+// Grass: multiple shades for fine dithered crosshatch pattern
+const GRASS_COLORS = [
+  new THREE.Color(0x40d040),  // bright green
+  new THREE.Color(0x30b830),  // medium green
+  new THREE.Color(0x28a828),  // slightly darker
+  new THREE.Color(0x38c038),  // mid-bright
+];
+// Brown cliffs: multiple shades for dithered slope pattern
+const CLIFF_COLORS = [
+  new THREE.Color(0xd0a050),  // light sandy
+  new THREE.Color(0xc08840),  // medium brown
+  new THREE.Color(0xa87030),  // darker brown
+  new THREE.Color(0xb88038),  // mid brown
+];
 // Beach
 const BEACH_COLOR = new THREE.Color(0xd4c882);
 // Water-adjacent brown edge
 const SHORE_BROWN = new THREE.Color(0xb08040);
+
+// Simple hash for per-tile variation (deterministic pseudo-random)
+function tileHash(x: number, z: number): number {
+  let h = (x * 374761393 + z * 668265263) | 0;
+  h = ((h ^ (h >> 13)) * 1274126177) | 0;
+  return ((h ^ (h >> 16)) >>> 0) / 4294967296; // 0..1
+}
 
 export { H_SCALE };
 
@@ -181,10 +197,8 @@ export class TerrainRenderer {
         positions.push(x, h01, z + 1);     // v+3: bottom-left
 
         // ── Determine color per vertex ──
-        // Calculate slope steepness for each triangle to decide grass vs cliff
-        // Triangle 1: v0, v2, v1
-        // Triangle 2: v0, v3, v2
-        const avgH = (h00 + h10 + h11 + h01) / 4;
+        // Fine crosshatch dithering like original Populous:
+        // Each vertex gets a color based on (x+z) parity PLUS per-tile variation
         const maxDiff = Math.max(
           Math.abs(h00 - h11),
           Math.abs(h10 - h01),
@@ -195,32 +209,36 @@ export class TerrainRenderer {
         );
 
         // Steep slope → brown cliff, gentle → green grass
-        const steepness = maxDiff / H_SCALE; // in height units
+        const steepness = maxDiff / H_SCALE;
         const isBeach = tileH === 1;
+        const tileVar = tileHash(x, z); // per-tile variation 0..1
 
-        // Dithered color: alternate based on (x+z) parity for stipple pattern
-        const parity = (x + z) % 2;
+        // Corner positions in the grid for crosshatch pattern
+        const cornerParities = [
+          (x + z) % 2,         // v0: top-left
+          (x + 1 + z) % 2,     // v1: top-right
+          (x + 1 + z + 1) % 2, // v2: bottom-right
+          (x + z + 1) % 2,     // v3: bottom-left
+        ];
 
         for (let ci = 0; ci < 4; ci++) {
           let color: THREE.Color;
+          const cp = cornerParities[ci];
+          // Pick from color palette using parity + tile variation
+          const palIdx = (cp + (tileVar > 0.5 ? 2 : 0)) % 4;
 
           if (isBeach && steepness < 0.8) {
             color = BEACH_COLOR;
-          } else if (steepness > 1.2) {
-            // Steep slope → brown cliff with dithering
-            const vParity = (parity + ci) % 2;
-            color = vParity === 0 ? CLIFF_LIGHT : CLIFF_DARK;
-          } else if (steepness > 0.5) {
-            // Medium slope → mix of brown and green
-            const vParity = (parity + ci) % 2;
-            const mix = (steepness - 0.5) / 0.7; // 0..1
-            const grassC = vParity === 0 ? GRASS_LIGHT : GRASS_DARK;
-            const cliffC = vParity === 0 ? CLIFF_LIGHT : CLIFF_DARK;
-            color = grassC.clone().lerp(cliffC, mix);
+          } else if (steepness > 1.0) {
+            // Steep slope → brown crosshatch
+            color = CLIFF_COLORS[palIdx];
+          } else if (steepness > 0.3) {
+            // Medium slope → blend green to brown
+            const mix = (steepness - 0.3) / 0.7;
+            color = GRASS_COLORS[palIdx].clone().lerp(CLIFF_COLORS[palIdx], mix);
           } else {
-            // Flat grass — dithered stipple pattern
-            const vParity = (parity + ci) % 2;
-            color = vParity === 0 ? GRASS_LIGHT : GRASS_DARK;
+            // Flat grass — fine crosshatch dithering with per-tile variation
+            color = GRASS_COLORS[palIdx];
           }
 
           colors.push(color.r, color.g, color.b);
@@ -278,11 +296,16 @@ export class TerrainRenderer {
             positions.push(ex1, botY, ez1);
             positions.push(ex0, botY, ez0);
 
-            // Brown cliff face with dithering
-            const parity = (x + z) % 2;
+            // Brown cliff face with crosshatch dithering
+            const cpShore = [
+              (ex0 + ez0) % 2,
+              (ex1 + ez1) % 2,
+              (ex1 + ez1 + 1) % 2,
+              (ex0 + ez0 + 1) % 2,
+            ];
             for (let ci = 0; ci < 4; ci++) {
-              const vp = (parity + ci) % 2;
-              const c = vp === 0 ? SHORE_BROWN : CLIFF_DARK;
+              const palIdx = (cpShore[ci] + (tileHash(x, z) > 0.5 ? 2 : 0)) % 4;
+              const c = CLIFF_COLORS[palIdx];
               colors.push(c.r, c.g, c.b);
             }
 
